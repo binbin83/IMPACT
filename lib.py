@@ -60,6 +60,14 @@ def association_Genrator(w1,w2,model,top_n=1000):
     res = res.sort_values(by='score',ascending=False,inplace=False)
     return(res)
 
+def normalized(x):
+    if np.linalg.norm(x)==0:
+        x_norm = x
+    else :
+        x_norm =x/np.linalg.norm(x)
+    return(x_norm)
+    
+
 def create_random_pair(n,model):
     """
     Function that creates n random pairs of word, using the model of Google news
@@ -68,7 +76,7 @@ def create_random_pair(n,model):
     Output: 
     - Pair: type:List ; list of pair size: nx2
     """
-    df = pd.DataFrame(list(model.wv.vocab.items()), columns=['word','count'])
+    df = pd.DataFrame(list(model.vocab.items()), columns=['word','count'])
     list_word = list(df['word'])
     shuffle(list_word)
     
@@ -76,6 +84,7 @@ def create_random_pair(n,model):
     for i in range(n):
         Pair.append([list_word[i],list_word[2*i]])
     return(Pair)
+
 
 def from_pair_to_subspace(Pair,model):
     """
@@ -115,6 +124,111 @@ def from_space_to_direction(SubS):
     direction = pca.components_[0]
     return(direction, expl_var,eig_values)
 
+def from_pair_to_direction0(Pair,model):
+    """
+    Extraction of the  principale component  of the subspace created from the differences of word pair with
+    with the vector b-a
+     Entry:
+    - Pair: type:List  size:nx2 ; list of pair word
+    - model: type:GensimModel
+    Output:
+    - direction : principal component of the PCA
+    - expl_var : explained_variance_ratio_ of the pca
+    - eig_values: eig_values of the pca
+    """
+    SubS = []
+    for a, b in Pair:
+        SubS.append(model[a] - model[b] )
+    SubS= np.array(SubS)
+    n_c =int(len(Pair)/2 )
+    #print('the dim initial is',len(SubS[0]))
+    # Now we are doinf a PCA
+    pca = PCA(n_components=n_c)
+    pca.fit(SubS)
+    Y_pca = pca.fit_transform(SubS)
+    eig_values = pca.singular_values_
+    expl_var = pca.explained_variance_ratio_
+    direction = pca.components_[0]
+    return(direction, expl_var,eig_values)
+
+
+def from_pair_to_direction1(Pair,model):
+    """
+    Extraction of the  principale component  of the subspace created from the differences of word pair with
+    with the vector b-a,a-b
+     Entry:
+    - Pair: type:List  size:nx2 ; list of pair word
+    - model: type:GensimModel
+    Output:
+    - direction : principal component of the PCA
+    - expl_var : explained_variance_ratio_ of the pca
+    - eig_values: eig_values of the pca
+    """
+    SubS = []
+    for a, b in Pair:
+        SubS.append(model[a] - model[b] )
+        SubS.append(model[b] - model[a] )
+    SubS= np.array(SubS)
+    n_c =len(Pair) 
+    #print('the dim initial is',len(SubS[0]))
+    # Now we are doinf a PCA
+    pca = PCA(n_components=n_c)
+    pca.fit(SubS)
+    Y_pca = pca.fit_transform(SubS)
+    eig_values = pca.singular_values_
+    expl_var = pca.explained_variance_ratio_
+    direction = pca.components_[0]
+    return(direction, expl_var,eig_values)
+
+
+
+def from_pair_to_direction2(Pair, model):
+    """
+    Extraction of the  principale component  of the subspace created from the differences of word pair with
+    with the vector b-center,a-center
+     Entry:
+    - Pair: type:List  size:nx2 ; list of pair word
+    - model: type:GensimModel
+    Output:
+    - direction : principal component of the PCA
+    - expl_var : explained_variance_ratio_ of the pca
+    - eig_values: eig_values of the pca
+    """
+    num_components = len(Pair)
+    matrix = []
+    for a, b in Pair:
+        center = (model[a] + model[b])/2
+        matrix.append(model[a] - center)
+        matrix.append(model[b] - center)
+    matrix = np.array(matrix)
+    pca = PCA(n_components = num_components)
+    pca.fit(matrix)
+    # bar(range(num_components), pca.explained_variance_ratio_)
+    eig_values = pca.singular_values_
+    expl_var = pca.explained_variance_ratio_
+    direction = pca.components_[0]
+    return(direction, expl_var,eig_values)
+
+
+def create_random_pair(n,model):
+    """
+    Function that creates n random pairs of word, using the model of Google news
+    Entry: 
+    - n: type:int Nunber of pair needed
+    Output: 
+    - Pair: type:List ; list of pair size: nx2
+    """
+    df = pd.DataFrame(list(model.wv.vocab.items()), columns=['word','count'])
+    list_word = list(df['word'])
+    shuffle(list_word)
+    
+    Pair=[]
+    for i in range(n):
+        Pair.append([list_word[i],list_word[2*i]])
+    return(Pair)
+
+
+
 def plot_var_eig(eig_values,expl_var):
     """
     plot the explained variance and theeigen values of the  pca
@@ -144,6 +258,22 @@ def plot_mean(n,model,rp=20) :
         Rand_eig.append(eig_values_r)
     return( plot_var_eig(np.asarray(Rand_eig).mean(axis=0) , np.asarray(Rand_var).mean(axis=0)))
 
+def Direct_Biais(corpus, Pair, model):
+    """
+    Return the direct biais of the corpus base on a pair of word to build a direction and a model
+    entry:
+    - corpus; type:list of word
+    - Pair;  type:list of Pair of Word
+    - model; type:GensimModel
+    output:
+    - db; type:float
+    
+    """
+    direction_g, expl_var_g,eig_values_g = from_pair_to_direction2(Pair, model)
+    B=0
+    for word in corpus :
+        B = B + abs(cosine_similarity(direction_g,model[word]))
+    return(B/len(corpus))
 
 
 # INDIRECT BIAIS
@@ -291,6 +421,98 @@ def wefat(w,A,B,model):
     
     return(diff_/np.std(st))
 
+##############################################################
+# Infer Gender#
+###############
+# df = pd.read_excel(r'DATA\FR\Lexique382.xlsx',encoding='latin1')
+def merge_model_lexique(lexique,model):
+    """
+    create a dataframe with word present in the lexiue and in our model
+    """
 
+    #Isolate the gender and create
+    df_genre =  lexique[['1_ortho','5_genre']]
+    df_genre = pd.DataFrame(data = df_genre.values,columns=['Mot','genre'])
+    #Load the word of the model
+    df_model = pd.DataFrame(list(model.vocab.items()), columns=['Mot','count'])
+    # Merge the vocab of the Lexique and the model
+    result = pd.merge(df_model,df_genre, on='Mot')
+    #keep only the word where there is a gender
+    result = result.dropna()
+    
+    return(result)
 
+def genre(x):
+    """
+    transform the gender f,m into 0,1
+    """
+    if 'f' in str(x):
+        return(0)
+    if 'm' in str(x) :
+        return(1)
+
+def built_X_y(result,model):
+    X=[]
+    for word in list(result['Mot']):
+        X.append(model[word])
+        
+    y = result['genre'].apply(genre)
+    return(np.asarray(X),y)
+
+##########################################################################
+# Autre #
+
+def load_embeddings(embeddings_path):
+    with codecs.open(embeddings_path + 'words.txt', 'r', 'utf8') as f_in:
+        index2word = [line.strip() for line in f_in]
+     
+    word2index = {w: i for i, w in enumerate(index2word)}
+    wv = np.load(embeddings_path + 'matrix.npy')
+        
+    return wv, index2word, word2index
+
+def buil_model(wv,index2word):
+    data = pd.DataFrame(wv,
+                    index=index2word[1:])
+    np.savetxt('C:/Users/Robin/Documents/IMPACT/Notebooks/DATA/FR/ppmi_svd_fr/matrix.txt', data.reset_index().values, 
+           delimiter=" ", 
+           header="{} {}".format(len(data), len(data.columns)),
+           comments="",encoding='latin1',
+           fmt=["%s"] + ["%.18e"]*len(data.columns))
+    model  = gensim.models.KeyedVectors.load_word2vec_format('C:/Users/Robin/Documents/IMPACT/Notebooks/DATA/FR/ppmi_svd_fr/matrix.txt',binary=False,encoding='latin1')
+    return(model)
+
+######
+# contribution #
+def from_pair_to_contribution(Pair, model):
+    """
+    Extraction of the contribution of each component for a pair of word in PCA
+     Entry:
+    - Pair: type:List  size:nx2 ; list of pair word
+    - model: type:GensimModel
+    Output:
+    - direction : principal component of the PCA
+    - expl_var : explained_variance_ratio_ of the pca
+    - eig_values: eig_values of the pca
+    """
+    num_components = len(Pair)
+    matrix = []
+    label = []
+    for a, b in Pair:
+        center = (model[a] + model[b])/2
+        matrix.append(model[a] - center)
+        matrix.append(model[b] - center)
+        label.append(str(a+'-'+b))
+        label.append(str(b+'-'+a))
+    
+    matrix = np.array(matrix)
+    pca = PCA(n_components = num_components)
+    coord = pca.fit_transform(matrix)
+    eigval = pca.singular_values_
+    ctr = coord**2 
+    contrib= pd.DataFrame(index=label)
+    for j in range(num_components): 
+        ctr[:,j] = ctr[:,j]/(eigval[j]) 
+        contrib['CTR_'+str(j+1)] = ctr[:,j]
+    return(contrib)
 
